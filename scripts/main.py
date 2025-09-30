@@ -54,8 +54,11 @@ var_b_end_station_id = Variable("b", getattr_func=lambda ev: ev.get("end station
 
 def chain_eq_op(*seq):
     seq = list(seq)
-    print(f"type: seq={type(seq)}, len={len(seq)}")
-    print(f"seq={seq}")
+    # print(f"type: seq={type(seq)}, len={len(seq)}")
+    # print(f"seq={seq}")
+
+    if len(seq) == 1:  # only one element in the sequence, no chaining to check
+        return True
 
     if not (isinstance(seq, list) and all(isinstance(e, dict) for e in seq) and len(seq) >= 2):
         return False
@@ -64,6 +67,7 @@ def chain_eq_op(*seq):
         and (seq[i + 1].get("start station id") == seq[i].get("end station id"))
         for i in range(len(seq) - 1)
     )
+
 
 chain_cond = SimpleCondition(
     var_a_seq,
@@ -108,9 +112,11 @@ class DataFrameInputStream(InputStream):
         self.close()
 
 
-df = pd.read_csv(
-    "/Users/zheyue/Workspace/Projects/cs-e4780/2014-citibike-tripdata/2_February/201402-citibike-tripdata_2.csv"
-)
+cur_path = pathlib.Path(__file__).parent.resolve()
+
+data_path = cur_path / "demo_data.csv"
+
+df = pd.read_csv(data_path)
 events = DataFrameInputStream(df)
 
 
@@ -144,4 +150,9 @@ class BikeTripEventTypeClassifier(EventTypeClassifier):
         return "BikeTrip"  # All events are of type "BikeTrip"
 
 
+import time
+
+start = time.monotonic_ns()
 cep.run(events, FileOutputStream("./", "output.txt"), BikeTripDataFormatter(BikeTripEventTypeClassifier()))
+end = time.monotonic_ns()
+print(f"Time taken: {(end - start) / 1e9} seconds")
