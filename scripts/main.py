@@ -24,6 +24,7 @@ from CEP import CEP
 from condition.CompositeCondition import AndCondition
 from condition.Condition import SimpleCondition
 from condition.Condition import Variable
+from condition.KCCondition import KCIndexCondition
 from stream.FileStream import FileOutputStream
 from stream.Stream import InputStream
 
@@ -52,26 +53,20 @@ var_b_end_station_id = Variable("b", getattr_func=lambda ev: ev.get("end station
 # 1) For all i: a[i+1].bikeid = a[i].bikeid AND a[i+1].starttime = a[i].stoptime
 
 
-def chain_eq_op(*seq):
-    seq = list(seq)
-    # print(f"type: seq={type(seq)}, len={len(seq)}")
-    # print(f"seq={seq}")
-
-    if len(seq) == 1:  # only one element in the sequence, no chaining to check
-        return True
-
-    if not (isinstance(seq, list) and all(isinstance(e, dict) for e in seq) and len(seq) >= 2):
-        return False
-    return all(
-        (seq[i + 1].get("bikeid") == seq[i].get("bikeid"))
-        and (seq[i + 1].get("start station id") == seq[i].get("end station id"))
-        for i in range(len(seq) - 1)
-    )
+def kc_compare_op(a, b):
+    print(f"Comparing: a={a}, b={b}")
+    return a["bikeid"] == b["bikeid"] and a["end station id"] == b["start station id"]
 
 
-chain_cond = SimpleCondition(
-    var_a_seq,
-    relation_op=chain_eq_op,
+chain_cond = KCIndexCondition(
+    names={"a"},
+    getattr_func=lambda elem: {
+        "bikeid": elem.get("bikeid"),
+        "start station id": elem.get("start station id"),
+        "end station id": elem.get("end station id"),
+    },
+    relation_op=kc_compare_op,
+    offset=1,
 )
 
 # 2) a[last].bikeid = b.bikeid
@@ -85,8 +80,8 @@ b_end_station_in_set = SimpleCondition(var_b_end_station_id, relation_op=lambda 
 
 bike_trip_pattern = Pattern(
     structure,
+    # AndCondition(chain_cond),
     AndCondition(chain_cond, last_matches_bike, b_end_station_in_set),
-    # AndCondition(last_matches_bike, b_end_station_in_set),
     timedelta(hours=1),
 )
 
