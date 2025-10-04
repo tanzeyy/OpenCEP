@@ -1,0 +1,7 @@
+[project]
+name = "OpenCEP"
+version = "0.1.0"
+dependencies = [
+    "pandas",
+    # add other dependencies here
+]

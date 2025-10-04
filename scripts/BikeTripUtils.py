@@ -20,6 +20,9 @@ class DataFrameInputStream(InputStream):
         self.close()
 
 class BikeTripDataFormatter(DataFormatter):
+    """
+    Format bike trip event payloads.
+    """
     _TS_FMT = "%Y-%m-%d %H:%M:%S"
 
     def get_event_timestamp(self, event_payload: dict):
@@ -35,5 +38,8 @@ class BikeTripDataFormatter(DataFormatter):
         return raw_data
 
 class BikeTripEventTypeClassifier(EventTypeClassifier):
+    """
+    Classify all events as "BikeTrip".
+    """
     def get_event_type(self, event_payload: dict):
         return "BikeTrip"
