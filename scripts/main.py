@@ -19,8 +19,15 @@ from CEP import CEP
 from condition.CompositeCondition import AndCondition
 from condition.Condition import SimpleCondition, Variable
 from condition.KCCondition import KCIndexCondition
+from misc import DefaultConfig
+from parallel.ParallelExecutionParameters import DataParallelExecutionParameters
+from parallel.ParallelExecutionParameters import DataParallelExecutionParametersHirzelAlgorithm
+from parallel.ParallelExecutionParameters import DataParallelExecutionParametersHyperCubeAlgorithm
+from parallel.ParallelExecutionParameters import DataParallelExecutionParametersRIPAlgorithm
+from parallel.ParallelExecutionParameters import ParallelExecutionParameters
 from stream.FileStream import FileOutputStream
 from scripts.BikeTripUtils import DataFrameInputStream, BikeTripDataFormatter, BikeTripEventTypeClassifier
+from stream.Stream import InputStream
 
 # PATTERN SEQ (BikeTrip+ a[], BikeTrip b)
 # WHERE a[i+1].bike = a[i].bike AND b.end in {7,8,9}
@@ -44,12 +51,6 @@ var_b_end_station_id = Variable("b", getattr_func=lambda ev: ev.get("end station
 
 # --- Conditions ---
 # 1) For all i: a[i+1].bikeid = a[i].bikeid AND a[i+1].starttime = a[i].stoptime
-
-def kc_compare_op(a, b):
-    print(f"Comparing: a={a}, b={b}")
-    return a["bikeid"] == b["bikeid"] and a["end station id"] == b["start station id"]
-
-
 chain_cond = KCIndexCondition(
     names={"a"},
     getattr_func=lambda elem: {
@@ -57,7 +58,7 @@ chain_cond = KCIndexCondition(
         "start station id": elem.get("start station id"),
         "end station id": elem.get("end station id"),
     },
-    relation_op=kc_compare_op,
+    relation_op=lambda a, b: a["bikeid"] == b["bikeid"] and a["end station id"] == b["start station id"],
     offset=1,
 )
 
@@ -79,12 +80,46 @@ bike_trip_pattern = Pattern(
 
 print(bike_trip_pattern)
 
-cep = CEP([bike_trip_pattern])
+eval_mechanism_params = None
+pattern_preprocessing_params = None
+parallel_execution_params = DataParallelExecutionParametersHirzelAlgorithm(
+    platform=DefaultConfig.ParallelExecutionPlatforms.THREADING,
+    units_number=2,
+    key='start station id',
+)
+# parallel_execution_params = None
+
+cep = CEP(
+    [bike_trip_pattern],
+    eval_mechanism_params,
+    parallel_execution_params,
+    pattern_preprocessing_params,
+)
+
+
+class DataFrameInputStream(InputStream):
+    """Emit each DataFrame row as a dict payload (not a CSV string)."""
+
+    def __init__(self, dataframe: pd.DataFrame):
+        super().__init__()
+        # Ensure all columns are string-key accessible and datetimes are stringified
+        df = dataframe.copy()
+        # If your CSV loader already gives strings for time columns, the following is safe/no-op.
+        if pd.api.types.is_datetime64_any_dtype(df.get("starttime", pd.Series([], dtype="datetime64[ns]"))):
+            df["starttime"] = df["starttime"].dt.strftime("%Y-%m-%d %H:%M:%S")
+        if pd.api.types.is_datetime64_any_dtype(df.get("stoptime", pd.Series([], dtype="datetime64[ns]"))):
+            df["stoptime"] = df["stoptime"].dt.strftime("%Y-%m-%d %H:%M:%S")
+        for _, row in df.iterrows():
+            self._stream.put(row.to_dict())
+        self.close()
+
+
 cur_path = pathlib.Path(__file__).parent.resolve()
 
+# data_path = "/Users/zheyue/Workspace/Projects/cs-e4780/2014-citibike-tripdata/3_March/201403-citibike-tripdata_1.csv"
 data_path = cur_path / "demo_data.csv"
 
-df = pd.read_csv(data_path)
+df = pd.read_csv(data_path).iloc[:20]
 events = DataFrameInputStream(df)
 
 start = time.monotonic_ns()
