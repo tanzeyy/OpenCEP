@@ -18,6 +18,10 @@ from base.PatternStructure import KleeneClosureOperator, PrimitiveEventStructure
 from CEP import CEP
 from condition.CompositeCondition import AndCondition
 from condition.Condition import SimpleCondition, Variable
+from condition.Condition import SimpleCondition
+from condition.Condition import Variable
+from misc.ConsumptionPolicy import ConsumptionPolicy
+from misc.SelectionStrategies import SelectionStrategies
 from condition.KCCondition import KCIndexCondition
 from misc import DefaultConfig
 from parallel.ParallelExecutionParameters import DataParallelExecutionParameters
@@ -67,8 +71,8 @@ last_matches_bike = SimpleCondition(
     var_a_last_bike, var_b_bike, relation_op=lambda last_bike, b_bike: last_bike == b_bike
 )
 
-# 3) b.end station id in {265}
-b_end_station_in_set = SimpleCondition(var_b_end_station_id, relation_op=lambda sid: sid in {265})
+# 3) b.end station id in {7,8,9}
+b_end_station_in_set = SimpleCondition(var_b_end_station_id, relation_op=lambda sid: sid in {7, 8, 9})
 
 
 bike_trip_pattern = Pattern(
@@ -76,6 +80,10 @@ bike_trip_pattern = Pattern(
     # AndCondition(chain_cond),
     AndCondition(chain_cond, last_matches_bike, b_end_station_in_set),
     timedelta(hours=1),
+    # consumption_policy=ConsumptionPolicy(
+    #     primary_selection_strategy=SelectionStrategies.MATCH_ANY,
+    #     secondary_selection_strategy=SelectionStrategies.MATCH_SINGLE,
+    # ),
 )
 
 print(bike_trip_pattern)
@@ -84,8 +92,8 @@ eval_mechanism_params = None
 pattern_preprocessing_params = None
 parallel_execution_params = DataParallelExecutionParametersHirzelAlgorithm(
     platform=DefaultConfig.ParallelExecutionPlatforms.THREADING,
-    units_number=2,
-    key='start station id',
+    units_number=8,
+    key="bikeid",
 )
 # parallel_execution_params = None
 
@@ -116,10 +124,10 @@ class DataFrameInputStream(InputStream):
 
 cur_path = pathlib.Path(__file__).parent.resolve()
 
-# data_path = "/Users/zheyue/Workspace/Projects/cs-e4780/2014-citibike-tripdata/3_March/201403-citibike-tripdata_1.csv"
-data_path = cur_path / "demo_data.csv"
+# data_path = "/Users/zheyue/Workspace/Projects/cs-e4780/2014-citibike-tripdata/2_February/201402-citibike-tripdata_1.csv"
+data_path = cur_path / "bike_events.csv"
 
-df = pd.read_csv(data_path).iloc[:20]
+df = pd.read_csv(data_path) # .iloc[:50]
 events = DataFrameInputStream(df)
 
 start = time.monotonic_ns()

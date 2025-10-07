@@ -3,8 +3,8 @@ This file contains the class responsible for parallel execution platform initial
 """
 from parallel.ParallelExecutionParameters import ParallelExecutionParameters
 from parallel.ParallelExecutionPlatforms import ParallelExecutionPlatforms
-from parallel.platform.ThreadingParallelExecutionPlatform import \
-    ThreadingParallelExecutionPlatform
+# from parallel.platform.MultiprocessingParallelExecutionPlatform import MultiprocessingParallelExecutionPlatform
+from parallel.platform.ThreadingParallelExecutionPlatform import ThreadingParallelExecutionPlatform
 
 
 class PlatformFactory:
@@ -17,4 +17,6 @@ class PlatformFactory:
             parallel_execution_params = ParallelExecutionParameters()
         if parallel_execution_params.platform == ParallelExecutionPlatforms.THREADING:
             return ThreadingParallelExecutionPlatform()
+        elif parallel_execution_params.platform == ParallelExecutionPlatforms.MULTIPROCESSING:
+            return MultiprocessingParallelExecutionPlatform()
         raise Exception("Unknown parallel execution platform: %s" % (parallel_execution_params.platform,))
