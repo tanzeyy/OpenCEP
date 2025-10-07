@@ -21,7 +21,6 @@ from condition.Condition import SimpleCondition, Variable
 from condition.KCCondition import KCIndexCondition
 from stream.FileStream import FileOutputStream
 from scripts.BikeTripUtils import DataFrameInputStream, BikeTripDataFormatter, BikeTripEventTypeClassifier
-from scripts.MyKleeneClosureOperator import MyKleeneClosureOperator, StateManager
 
 # PATTERN SEQ (BikeTrip+ a[], BikeTrip b)
 # WHERE a[i+1].bike = a[i].bike AND b.end in {7,8,9}
@@ -32,14 +31,7 @@ from scripts.MyKleeneClosureOperator import MyKleeneClosureOperator, StateManage
 # --- Structure: SEQ( (BikeTrip a)+ , (BikeTrip b) ) ---
 a_prim = PrimitiveEventStructure("BikeTrip", "a")
 b_prim = PrimitiveEventStructure("BikeTrip", "b")
-# a_plus = KleeneClosureOperator(arg=a_prim, min_size=1, max_size=10)
-a_plus = MyKleeneClosureOperator(arg=a_prim, min_size=1, max_size=10,
-                                 window_seconds=3600, capacity=2000,
-                                 strategy="semantic")
-
-state_manager = StateManager(window_seconds=3600, capacity=2000, strategy="random")
-a_plus.state_manager = state_manager
-
+a_plus = KleeneClosureOperator(arg=a_prim, min_size=1, max_size=10)
 structure = SeqOperator(a_plus, b_prim)
 
 # --- Variables bound by the engine: {"a": List[dict], "b": dict} ---
