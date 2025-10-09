@@ -1,6 +1,6 @@
 # -*- encoding: utf-8 -*-
 # File: main.py
-
+import argparse
 import pathlib
 import pandas as pd
 import sys
@@ -33,6 +33,27 @@ from stream.FileStream import FileOutputStream
 from scripts.BikeTripUtils import DataFrameInputStream, BikeTripDataFormatter, BikeTripEventTypeClassifier
 from stream.Stream import InputStream
 
+# -------------------- ARGUMENT PARSER --------------------
+parser = argparse.ArgumentParser(description="OpenCEP Pattern Matcher")
+parser.add_argument("--policy",
+                    type=str,
+                    default="none",
+                    choices=["none","match_any", "match_next","match_single"],
+                    help="Consumption policy")
+parser.add_argument("--threads", type=int, default=1, help="Number of execution threads")
+parser.add_argument("--input", type=str, default="bike_events_1x.csv", help="Path to input CSV file")
+parser.add_argument("--output", type=str, default="output.csv", help="Path for emitted text output")
+args = parser.parse_args()
+
+# -------------------- LOAD INPUT DATA --------------------
+cur_path = pathlib.Path(__file__).parent.resolve()
+data_path = cur_path/"data"/args.input
+if not data_path.exists():
+    raise FileNotFoundError(f"Input file not found: {data_path}")
+df = pd.read_csv(data_path)
+events = DataFrameInputStream(df)
+
+# -------------------- DEFINE PATTERN --------------------
 # PATTERN SEQ (BikeTrip+ a[], BikeTrip b)
 # WHERE a[i+1].bike = a[i].bike AND b.end in {7,8,9}
 # AND a[last].bike = b.bike AND a[i+1].start = a[i].end
@@ -40,9 +61,9 @@ from stream.Stream import InputStream
 # RETURN (a[1].start, a[i].end, b.end)
 
 # --- Structure: SEQ( (BikeTrip a)+ , (BikeTrip b) ) ---
-a_prim = PrimitiveEventStructure("BikeTrip", "a")
-b_prim = PrimitiveEventStructure("BikeTrip", "b")
-a_plus = KleeneClosureOperator(arg=a_prim, min_size=1, max_size=10)
+a_prim = PrimitiveEventStructure(event_type="BikeTrip", name="a")
+b_prim = PrimitiveEventStructure(event_type="BikeTrip", name="b")
+a_plus = KleeneClosureOperator(arg=a_prim, min_size=1, max_size=10)  # limit the sequence length
 structure = SeqOperator(a_plus, b_prim)
 
 # --- Variables bound by the engine: {"a": List[dict], "b": dict} ---
@@ -75,62 +96,54 @@ last_matches_bike = SimpleCondition(
 b_end_station_in_set = SimpleCondition(var_b_end_station_id, relation_op=lambda sid: sid in {7, 8, 9})
 
 
+# -------------------- LOAD SHEDDING POLICY --------------------
+if args.policy == "match_any":
+    policy = ConsumptionPolicy(primary_selection_strategy=SelectionStrategies.MATCH_ANY)
+elif args.policy == "match_single":
+    # MATCH_ANY (the default) as the primary strategy.
+    # MATCH_SINGLE forces each primitive event into at most one full match.
+    policy = ConsumptionPolicy(primary_selection_strategy=SelectionStrategies.MATCH_ANY,
+                               secondary_selection_strategy=SelectionStrategies.MATCH_SINGLE)
+elif args.policy == "match_next":
+    # MATCH_ANY (the default) as the primary strategy.
+    # MATCH_NEXT limits all primitive events to only appear in the next possible match
+    policy = ConsumptionPolicy(primary_selection_strategy=SelectionStrategies.MATCH_ANY,
+                               secondary_selection_strategy=SelectionStrategies.MATCH_NEXT)
+else:
+    policy = None  # no consumption policy
+
 bike_trip_pattern = Pattern(
     structure,
-    # AndCondition(chain_cond),
     AndCondition(chain_cond, last_matches_bike, b_end_station_in_set),
     timedelta(hours=1),
-    # consumption_policy=ConsumptionPolicy(
-    #     primary_selection_strategy=SelectionStrategies.MATCH_ANY,
-    #     secondary_selection_strategy=SelectionStrategies.MATCH_SINGLE,
-    # ),
+    consumption_policy=policy,
 )
 
-print(bike_trip_pattern)
 
+# -------------------- PARALLELISM SETUP --------------------
+# thread parallelism via Hirzel et al. algorithm
 eval_mechanism_params = None
 pattern_preprocessing_params = None
 parallel_execution_params = DataParallelExecutionParametersHirzelAlgorithm(
     platform=DefaultConfig.ParallelExecutionPlatforms.THREADING,
-    units_number=8,
+    units_number=args.threads,
     key="bikeid",
 )
-# parallel_execution_params = None
 
+# -------------------- CEP ENGINE SETUP --------------------
 cep = CEP(
-    [bike_trip_pattern],
-    eval_mechanism_params,
-    parallel_execution_params,
-    pattern_preprocessing_params,
+    patterns=[bike_trip_pattern],
+    eval_mechanism_params=eval_mechanism_params,
+    parallel_execution_params=parallel_execution_params,
+    pattern_preprocessing_params=pattern_preprocessing_params,
 )
 
-
-class DataFrameInputStream(InputStream):
-    """Emit each DataFrame row as a dict payload (not a CSV string)."""
-
-    def __init__(self, dataframe: pd.DataFrame):
-        super().__init__()
-        # Ensure all columns are string-key accessible and datetimes are stringified
-        df = dataframe.copy()
-        # If your CSV loader already gives strings for time columns, the following is safe/no-op.
-        if pd.api.types.is_datetime64_any_dtype(df.get("starttime", pd.Series([], dtype="datetime64[ns]"))):
-            df["starttime"] = df["starttime"].dt.strftime("%Y-%m-%d %H:%M:%S")
-        if pd.api.types.is_datetime64_any_dtype(df.get("stoptime", pd.Series([], dtype="datetime64[ns]"))):
-            df["stoptime"] = df["stoptime"].dt.strftime("%Y-%m-%d %H:%M:%S")
-        for _, row in df.iterrows():
-            self._stream.put(row.to_dict())
-        self.close()
-
-
-cur_path = pathlib.Path(__file__).parent.resolve()
-
-# data_path = "/Users/zheyue/Workspace/Projects/cs-e4780/2014-citibike-tripdata/2_February/201402-citibike-tripdata_1.csv"
-data_path = cur_path / "bike_events.csv"
-
-df = pd.read_csv(data_path) # .iloc[:50]
-events = DataFrameInputStream(df)
-
+# -------------------- RUN & MEASURE --------------------
 start = time.monotonic_ns()
-cep.run(events, FileOutputStream("./", "output.txt"), BikeTripDataFormatter(BikeTripEventTypeClassifier()))
+cep.run(events, FileOutputStream("./", args.output), BikeTripDataFormatter(BikeTripEventTypeClassifier()))
+
+print(f"Pattern detection on dataset {args.input}.")
+print(f"Load shedding strategy: {args.policy}.")
+print(f"Text output written to {args.output}.")
 end = time.monotonic_ns()
 print(f"Time taken: {(end - start) / 1e9} seconds")
