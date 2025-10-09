@@ -18,20 +18,14 @@ from base.PatternStructure import KleeneClosureOperator, PrimitiveEventStructure
 from CEP import CEP
 from condition.CompositeCondition import AndCondition
 from condition.Condition import SimpleCondition, Variable
-from condition.Condition import SimpleCondition
-from condition.Condition import Variable
 from misc.ConsumptionPolicy import ConsumptionPolicy
 from misc.SelectionStrategies import SelectionStrategies
 from condition.KCCondition import KCIndexCondition
 from misc import DefaultConfig
 from parallel.ParallelExecutionParameters import DataParallelExecutionParameters
 from parallel.ParallelExecutionParameters import DataParallelExecutionParametersHirzelAlgorithm
-from parallel.ParallelExecutionParameters import DataParallelExecutionParametersHyperCubeAlgorithm
-from parallel.ParallelExecutionParameters import DataParallelExecutionParametersRIPAlgorithm
-from parallel.ParallelExecutionParameters import ParallelExecutionParameters
 from stream.FileStream import FileOutputStream
-from scripts.BikeTripUtils import DataFrameInputStream, BikeTripDataFormatter, BikeTripEventTypeClassifier
-from stream.Stream import InputStream
+from project.utils.BikeTripUtils import DataFrameInputStream, BikeTripDataFormatter, BikeTripEventTypeClassifier
 
 # -------------------- ARGUMENT PARSER --------------------
 parser = argparse.ArgumentParser(description="OpenCEP Pattern Matcher")
@@ -39,9 +33,17 @@ parser.add_argument("--policy",
                     type=str,
                     default="none",
                     choices=["none","match_any", "match_next","match_single"],
-                    help="Consumption policy")
-parser.add_argument("--threads", type=int, default=1, help="Number of execution threads")
-parser.add_argument("--input", type=str, default="bike_events_1x.csv", help="Path to input CSV file")
+                    help="Consumption policy"
+                    )
+parser.add_argument("--freeze",
+                    type=str,
+                    default="none",
+                    choices=["a", "b"],
+                    help="Prohibit creation of new partial matches from the point a new chosen event (a or b) is accepted "
+                         "and until it is either matched or expired."
+                    )
+parser.add_argument("--threads", type=int, default=8, help="Number of execution threads")
+parser.add_argument("--input", type=str, default="bike_events_2x.csv", help="Path to input CSV file")
 parser.add_argument("--output", type=str, default="output.csv", help="Path for emitted text output")
 args = parser.parse_args()
 
@@ -95,20 +97,22 @@ last_matches_bike = SimpleCondition(
 # 3) b.end station id in {7,8,9}
 b_end_station_in_set = SimpleCondition(var_b_end_station_id, relation_op=lambda sid: sid in {7, 8, 9})
 
-
 # -------------------- LOAD SHEDDING POLICY --------------------
 if args.policy == "match_any":
-    policy = ConsumptionPolicy(primary_selection_strategy=SelectionStrategies.MATCH_ANY)
+    policy = ConsumptionPolicy(primary_selection_strategy=SelectionStrategies.MATCH_ANY,
+                               freeze=args.freeze)
 elif args.policy == "match_single":
     # MATCH_ANY (the default) as the primary strategy.
     # MATCH_SINGLE forces each primitive event into at most one full match.
     policy = ConsumptionPolicy(primary_selection_strategy=SelectionStrategies.MATCH_ANY,
-                               secondary_selection_strategy=SelectionStrategies.MATCH_SINGLE)
+                               secondary_selection_strategy=SelectionStrategies.MATCH_SINGLE,
+                               freeze=args.freeze)
 elif args.policy == "match_next":
     # MATCH_ANY (the default) as the primary strategy.
     # MATCH_NEXT limits all primitive events to only appear in the next possible match
     policy = ConsumptionPolicy(primary_selection_strategy=SelectionStrategies.MATCH_ANY,
-                               secondary_selection_strategy=SelectionStrategies.MATCH_NEXT)
+                               secondary_selection_strategy=SelectionStrategies.MATCH_NEXT,
+                               freeze=args.freeze)
 else:
     policy = None  # no consumption policy
 
@@ -118,7 +122,6 @@ bike_trip_pattern = Pattern(
     timedelta(hours=1),
     consumption_policy=policy,
 )
-
 
 # -------------------- PARALLELISM SETUP --------------------
 # thread parallelism via Hirzel et al. algorithm
@@ -141,9 +144,9 @@ cep = CEP(
 # -------------------- RUN & MEASURE --------------------
 start = time.monotonic_ns()
 cep.run(events, FileOutputStream("./", args.output), BikeTripDataFormatter(BikeTripEventTypeClassifier()))
+end = time.monotonic_ns()
 
 print(f"Pattern detection on dataset {args.input}.")
 print(f"Load shedding strategy: {args.policy}.")
 print(f"Text output written to {args.output}.")
-end = time.monotonic_ns()
 print(f"Time taken: {(end - start) / 1e9} seconds")
