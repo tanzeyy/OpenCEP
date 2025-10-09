@@ -25,13 +25,13 @@ class BikeTripDataFormatter(DataFormatter):
     """
     _TS_FMT = "%Y-%m-%d %H:%M:%S"
 
-    def get_event_timestamp(self, event_payload: dict):
+    def get_event_timestamp(self, event_payload: dict) -> datetime:
         ts_str = event_payload.get("starttime") or event_payload.get("stoptime")
         if not ts_str:
             raise KeyError("Neither 'starttime' nor 'stoptime' found in payload")
         return datetime.strptime(ts_str, self._TS_FMT)
 
-    def get_event_type(self, event_payload: dict):
+    def get_event_type(self, event_payload: dict) -> str:
         return "BikeTrip"
 
     def parse_event(self, raw_data):
@@ -41,5 +41,5 @@ class BikeTripEventTypeClassifier(EventTypeClassifier):
     """
     Classify all events as "BikeTrip".
     """
-    def get_event_type(self, event_payload: dict):
+    def get_event_type(self, event_payload: dict) -> str:
         return "BikeTrip"
