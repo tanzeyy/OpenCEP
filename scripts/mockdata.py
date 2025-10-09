@@ -155,10 +155,10 @@ def build_noise_trip(
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--n", type=int, required=True)
-    ap.add_argument("--x", type=int, required=True)
+    ap.add_argument("--n", type=int, required=True)  # total rows to generate
+    ap.add_argument("--x", type=int, required=True)  # hot-path sequences to generate
     ap.add_argument("--seed", type=int, default=1234)
-    ap.add_argument("--out", type=str, default="bike_events.csv")
+    ap.add_argument("--out", type=str, default="scripts/bike_events.csv")
     ap.add_argument("--base-date", type=str, default="2014-01-31")
     args = ap.parse_args()
 
