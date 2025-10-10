@@ -1,9 +1,14 @@
 # scripts/BikeTripUtils.py
 
-import pandas as pd
+import os
 from datetime import datetime
-from base.DataFormatter import DataFormatter, EventTypeClassifier
+
+import pandas as pd
+from base.DataFormatter import DataFormatter
+from base.DataFormatter import EventTypeClassifier
 from stream.Stream import InputStream
+from stream.Stream import OutputStream
+
 
 class DataFrameInputStream(InputStream):
     """Emit each DataFrame row as a dict payload (not a CSV string)."""
@@ -19,10 +24,12 @@ class DataFrameInputStream(InputStream):
             self._stream.put(row.to_dict())
         self.close()
 
+
 class BikeTripDataFormatter(DataFormatter):
     """
     Format bike trip event payloads.
     """
+
     _TS_FMT = "%Y-%m-%d %H:%M:%S"
 
     def get_event_timestamp(self, event_payload: dict) -> datetime:
@@ -37,9 +44,11 @@ class BikeTripDataFormatter(DataFormatter):
     def parse_event(self, raw_data):
         return raw_data
 
+
 class BikeTripEventTypeClassifier(EventTypeClassifier):
     """
     Classify all events as "BikeTrip".
     """
+
     def get_event_type(self, event_payload: dict) -> str:
         return "BikeTrip"

@@ -29,31 +29,37 @@ from project.utils.BikeTripUtils import DataFrameInputStream, BikeTripDataFormat
 
 # -------------------- ARGUMENT PARSER --------------------
 parser = argparse.ArgumentParser(description="OpenCEP Pattern Matcher")
-parser.add_argument("--policy",
-                    type=str,
-                    default="none",
-                    choices=["none","match_any", "match_next","match_single"],
-                    help="Consumption policy"
-                    )
-parser.add_argument("--freeze",
-                    type=str,
-                    default="none",
-                    choices=["a", "b"],
-                    help="Prohibit creation of new partial matches from the point a new chosen event (a or b) is accepted "
-                         "and until it is either matched or expired."
-                    )
-parser.add_argument("--threads", type=int, default=8, help="Number of execution threads")
+parser.add_argument(
+    "--policy",
+    type=str,
+    default="none",
+    choices=["none", "match_any", "match_next", "match_single"],
+    help="Consumption policy",
+)
+parser.add_argument(
+    "--freeze",
+    type=str,
+    default="none",
+    choices=["a", "b"],
+    help="Prohibit creation of new partial matches from the point a new chosen event (a or b) is accepted "
+    "and until it is either matched or expired.",
+)
+parser.add_argument("--threads", type=int, default=12, help="Number of execution threads")
 parser.add_argument("--input", type=str, default="bike_events_2x.csv", help="Path to input CSV file")
 parser.add_argument("--output", type=str, default="output.csv", help="Path for emitted text output")
 args = parser.parse_args()
 
 # -------------------- LOAD INPUT DATA --------------------
-cur_path = pathlib.Path(__file__).parent.resolve()
-data_path = cur_path/"data"/args.input
-if not data_path.exists():
-    raise FileNotFoundError(f"Input file not found: {data_path}")
-df = pd.read_csv(data_path)
-events = DataFrameInputStream(df)
+
+
+def build_events_stream(data_path: pathlib.Path) -> DataFrameInputStream:
+    if not data_path.exists():
+        raise FileNotFoundError(f"Input file not found: {data_path}")
+    df = pd.read_csv(data_path)
+    events = DataFrameInputStream(df)
+
+    return events
+
 
 # -------------------- DEFINE PATTERN --------------------
 # PATTERN SEQ (BikeTrip+ a[], BikeTrip b)
@@ -95,24 +101,27 @@ last_matches_bike = SimpleCondition(
 )
 
 # 3) b.end station id in {7,8,9}
-b_end_station_in_set = SimpleCondition(var_b_end_station_id, relation_op=lambda sid: sid in {7, 8, 9})
+b_end_station_in_set = SimpleCondition(var_b_end_station_id, relation_op=lambda sid: sid in {293, 497, 521})
 
 # -------------------- LOAD SHEDDING POLICY --------------------
 if args.policy == "match_any":
-    policy = ConsumptionPolicy(primary_selection_strategy=SelectionStrategies.MATCH_ANY,
-                               freeze=args.freeze)
+    policy = ConsumptionPolicy(primary_selection_strategy=SelectionStrategies.MATCH_ANY, freeze=args.freeze)
 elif args.policy == "match_single":
     # MATCH_ANY (the default) as the primary strategy.
     # MATCH_SINGLE forces each primitive event into at most one full match.
-    policy = ConsumptionPolicy(primary_selection_strategy=SelectionStrategies.MATCH_ANY,
-                               secondary_selection_strategy=SelectionStrategies.MATCH_SINGLE,
-                               freeze=args.freeze)
+    policy = ConsumptionPolicy(
+        primary_selection_strategy=SelectionStrategies.MATCH_ANY,
+        secondary_selection_strategy=SelectionStrategies.MATCH_SINGLE,
+        freeze=args.freeze,
+    )
 elif args.policy == "match_next":
     # MATCH_ANY (the default) as the primary strategy.
     # MATCH_NEXT limits all primitive events to only appear in the next possible match
-    policy = ConsumptionPolicy(primary_selection_strategy=SelectionStrategies.MATCH_ANY,
-                               secondary_selection_strategy=SelectionStrategies.MATCH_NEXT,
-                               freeze=args.freeze)
+    policy = ConsumptionPolicy(
+        primary_selection_strategy=SelectionStrategies.MATCH_ANY,
+        secondary_selection_strategy=SelectionStrategies.MATCH_NEXT,
+        freeze=args.freeze,
+    )
 else:
     policy = None  # no consumption policy
 
@@ -133,20 +142,36 @@ parallel_execution_params = DataParallelExecutionParametersHirzelAlgorithm(
     key="bikeid",
 )
 
-# -------------------- CEP ENGINE SETUP --------------------
-cep = CEP(
-    patterns=[bike_trip_pattern],
-    eval_mechanism_params=eval_mechanism_params,
-    parallel_execution_params=parallel_execution_params,
-    pattern_preprocessing_params=pattern_preprocessing_params,
-)
 
+# -------------------- CEP ENGINE SETUP --------------------
+def build_cep() -> CEP:
+    return CEP(
+        patterns=[bike_trip_pattern],
+        eval_mechanism_params=eval_mechanism_params,
+        parallel_execution_params=parallel_execution_params,
+        pattern_preprocessing_params=pattern_preprocessing_params,
+    )
+
+
+cep = build_cep()
 # -------------------- RUN & MEASURE --------------------
+
+# Define paths relative to this script's location
+cur_path = pathlib.Path(__file__).parent.resolve()
+data_path = cur_path / "data" / args.input
+events = build_events_stream(data_path)
+
+fmt = BikeTripDataFormatter(BikeTripEventTypeClassifier())
+
 start = time.monotonic_ns()
-cep.run(events, FileOutputStream("./", args.output), BikeTripDataFormatter(BikeTripEventTypeClassifier()))
+cep.run(
+    events,
+    FileOutputStream("./", args.output, is_async=True),
+    fmt,
+)
 end = time.monotonic_ns()
 
-print(f"Pattern detection on dataset {args.input}.")
-print(f"Load shedding strategy: {args.policy}.")
-print(f"Text output written to {args.output}.")
-print(f"Time taken: {(end - start) / 1e9} seconds")
+# print(f"Pattern detection on dataset {args.input}.")
+# print(f"Load shedding strategy: {args.policy}.")
+# print(f"Text output written to {args.output}.")
+# print(f"Time taken: {(end - start) / 1e9} seconds")

@@ -1,0 +1,9 @@
+latency_pct_target,latency_target_s,elapsed_s,matches,recall,cpu_avg_pct,cpu_peak_pct,ram_avg_bytes,ram_peak_bytes,return_code,stderr_snippet
+10,5.1244,5.1368,27,0.2348,0.00,0.00,0,0,-1,TimeoutExpired during cep.run()
+30,15.3733,15.3883,28,0.2435,0.00,0.00,0,0,-1,TimeoutExpired during cep.run()
+50,25.6222,25.6367,28,0.2435,0.00,0.00,0,0,-1,TimeoutExpired during cep.run()
+70,35.8711,35.8931,28,0.2435,0.00,0.00,0,0,-1,TimeoutExpired during cep.run()
+90,46.1199,46.1394,28,0.2435,0.00,0.00,0,0,-1,TimeoutExpired during cep.run()
+95,48.6821,47.7328,28,0.2435,0.00,0.00,0,0,0,
+98,50.2195,47.7864,28,0.2435,0.00,0.00,0,0,0,
+99,50.7319,48.1120,28,0.2435,0.00,0.00,0,0,0,
