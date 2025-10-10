@@ -1,4 +1,4 @@
-# File: `scripts/evaluator.py`
+# File: project/performance_eval/measure_recall.py
 """
 Automates:
  - baseline run (no shedding) to collect matches_baseline.csv
@@ -22,7 +22,7 @@ cur_path = pathlib.Path(__file__).parent.resolve()
 project_root = cur_path.parent.resolve()
 MAIN_PY = str(project_root / "main.py")
 RESULT_CSV = cur_path / "results/recall_summary.csv"
-DEFAULT_INPUT = project_root / "data/bike_events_1x.csv"
+DEFAULT_INPUT = project_root / "data/bike_events_2x.csv"
 SAMPLE_INTERVAL = 0.2  # seconds
 
 def run_main(cmd_args, timeout_s: float or None):
@@ -107,7 +107,7 @@ def main():
     # 1) Baseline run (no shedding, no timeout)
     baseline_out = cur_path / "results/baseline_matches.csv"
 
-    baseline_args = ["--output", str(baseline_out), "--input", DEFAULT_INPUT, "--policy", "none"]
+    baseline_args = ["--output", str(baseline_out), "--input", str(DEFAULT_INPUT), "--policy", "none"]
     T0, rc, stderr, _ = run_main(baseline_args, timeout_s=None)
     if rc != 0:
         logging.error(f"Baseline run failed with exit code {rc}. Stderr:\n{stderr}")
@@ -134,12 +134,11 @@ def main():
         print(f"Running with {int(percent * 100)}% latency target ({target_latency:.2f}s)...")
 
         out_file = cur_path / f"run_{int(percent * 100)}.out"
-        # Assuming a policy that supports shedding is needed for these runs
+        # The timeout is enforced by run_main, not by an argument to main.py
         run_args = [
             "--output", str(out_file),
-            "--input", DEFAULT_INPUT,
+            "--input", str(DEFAULT_INPUT),
             "--policy", "none",
-            "--latency-target", str(target_latency)  # Pass to main.py if it can use it
         ]
 
         Ta, rc, stderr, summary = run_main(run_args, timeout_s=target_latency)
@@ -170,4 +169,5 @@ def main():
     logging.info(f"Evaluation complete. Results saved to '{RESULT_CSV}'")
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
     main()
