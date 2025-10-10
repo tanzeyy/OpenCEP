@@ -30,7 +30,7 @@ from parallel.ParallelExecutionParameters import DataParallelExecutionParameters
 from parallel.ParallelExecutionParameters import DataParallelExecutionParametersRIPAlgorithm
 from parallel.ParallelExecutionParameters import ParallelExecutionParameters
 from stream.FileStream import FileOutputStream
-from scripts.BikeTripUtils import DataFrameInputStream, BikeTripDataFormatter, BikeTripEventTypeClassifier
+from project.utils.BikeTripUtils import DataFrameInputStream, BikeTripDataFormatter, BikeTripEventTypeClassifier
 from stream.Stream import InputStream
 
 # PATTERN SEQ (BikeTrip+ a[], BikeTrip b)
@@ -92,9 +92,20 @@ eval_mechanism_params = None
 pattern_preprocessing_params = None
 parallel_execution_params = DataParallelExecutionParametersHirzelAlgorithm(
     platform=DefaultConfig.ParallelExecutionPlatforms.THREADING,
-    units_number=128,
+    units_number=16,
     key="bikeid",
 )
+# parallel_execution_params = DataParallelExecutionParametersHyperCubeAlgorithm(
+#     platform=DefaultConfig.ParallelExecutionPlatforms.THREADING,
+#     units_number=16,
+#     attributes_dict={"bikeid": 4, "start station id": 8, "end station id": 8}  # 256 partitions
+# )
+parallel_execution_params = DataParallelExecutionParametersRIPAlgorithm(
+    platform=DefaultConfig.ParallelExecutionPlatforms.THREADING,
+    units_number=16,
+    multiple=1.5,
+)
+
 # parallel_execution_params = None
 
 cep = CEP(
@@ -126,7 +137,7 @@ cur_path = pathlib.Path(__file__).parent.resolve()
 
 # data_path = "/Users/zheyue/Workspace/Projects/cs-e4780/2014-citibike-tripdata/2_February/201402-citibike-tripdata_1.csv"
 data_path = cur_path / "bike_events_large.csv"
-data_path = cur_path / "bike_events_synth.csv"
+# data_path = cur_path / "bike_events_synth.csv"
 
 df = pd.read_csv(data_path) # .iloc[:50]
 events = DataFrameInputStream(df)
